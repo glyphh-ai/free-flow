@@ -36,10 +36,10 @@ const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'hi
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.15;
 document.body.prepend(renderer.domElement);
 const scene = new THREE.Scene();
-const SKY = new THREE.Color(0xcfe6f7), FOG = new THREE.Color(0xc4dcef);
+const SKY = new THREE.Color(0xe4f1fa), FOG = new THREE.Color(0xc4dcef), FAR_SEA = new THREE.Color(0x3d8cc0);
 scene.fog = new THREE.Fog(FOG, 150, 2200);
 const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 3200);
 addEventListener('resize', function () { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
@@ -48,24 +48,42 @@ addEventListener('resize', function () { renderer.setSize(innerWidth, innerHeigh
 (function () {
   const g = new THREE.SphereGeometry(1200, 32, 16), c = [], top = new THREE.Color(0x1f6fd1), mid = new THREE.Color(0x6aaee8), low = SKY;
   for (let i = 0; i < g.attributes.position.count; i++) {
-    const y = g.attributes.position.getY(i) / 1200, col = y > 0.25 ? mid.clone().lerp(top, Math.min(1, (y - 0.25) / 0.6)) : low.clone().lerp(mid, Math.max(0, (y + 0.05) / 0.3));
+    // below the horizon the dome is the far sea, so there is always a clean line where sea meets sky
+    const y = g.attributes.position.getY(i) / 1200, col = y < -0.004 ? FAR_SEA.clone().lerp(new THREE.Color(0x0b4f82), Math.min(1, -y * 4)) : y > 0.25 ? mid.clone().lerp(top, Math.min(1, (y - 0.25) / 0.6)) : low.clone().lerp(mid, Math.max(0, y / 0.25));
     c.push(col.r, col.g, col.b);
   }
   g.setAttribute('color', new THREE.Float32BufferAttribute(c, 3));
   const sky = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false }));
   sky.name = 'sky'; sky.renderOrder = -1; scene.add(sky);
-  // clouds: soft white puffs painted on the inside of the sky
-  const puff = document.createElement('canvas'); puff.width = puff.height = 128;
-  const px = puff.getContext('2d'), gr = px.createRadialGradient(64, 64, 4, 64, 64, 64); gr.addColorStop(0, 'rgba(255,255,255,0.95)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); px.fillStyle = gr; px.fillRect(0, 0, 128, 128);
-  const pt = new THREE.CanvasTexture(puff), r = rng(99);
-  for (let i = 0; i < 26; i++) {
-    const a = r() * Math.PI * 2, el = 0.12 + r() * 0.35, cloud = new THREE.Group();
-    for (let j = 0; j < 7; j++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: pt, fog: false, depthWrite: false, transparent: true, opacity: 0.85 })); s.scale.set(120 + r() * 140, 60 + r() * 50, 1); s.position.set((r() - 0.5) * 220, (r() - 0.5) * 30, (r() - 0.5) * 60); cloud.add(s); }
+  // the sky lights and is mirrored in everything shiny, the sea most of all
+  const envScene = new THREE.Scene(); envScene.add(new THREE.Mesh(g, sky.material));
+  scene.environment = new THREE.PMREMGenerator(renderer).fromScene(envScene, 0.01).texture;
+  scene.environmentIntensity = 0.55;
+  // clouds: big summer cumulus, piled puffs, bright on top and grey underneath, lowest near the horizon
+  const puffTex = function (top, bottom) {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const x = c.getContext('2d'), lin = x.createLinearGradient(0, 0, 0, 128); lin.addColorStop(0, top); lin.addColorStop(1, bottom);
+    x.fillStyle = lin; x.fillRect(0, 0, 128, 128);
+    x.globalCompositeOperation = 'destination-in';
+    const rad = x.createRadialGradient(64, 64, 10, 64, 64, 64); rad.addColorStop(0, 'rgba(0,0,0,1)'); rad.addColorStop(0.6, 'rgba(0,0,0,0.85)'); rad.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = rad; x.fillRect(0, 0, 128, 128);
+    return new THREE.CanvasTexture(c);
+  };
+  const lit = puffTex('#ffffff', '#dfe6ee'), shade = puffTex('#eef2f6', '#a9b6c4'), r = rng(99);
+  for (let i = 0; i < 44; i++) {
+    const a = r() * Math.PI * 2, el = 0.03 + Math.pow(r(), 1.5) * 0.4, size = 0.6 + r() * 1.1, cloud = new THREE.Group();
+    const n = 8 + Math.floor(r() * 8);
+    for (let j = 0; j < n; j++) {
+      const up = r(), s = new THREE.Sprite(new THREE.SpriteMaterial({ map: up > 0.35 ? lit : shade, fog: false, depthWrite: false, transparent: true }));
+      const w = (50 + r() * 70) * size; s.scale.set(w, w * 0.85, 1);
+      s.position.set((r() - 0.5) * 200 * size, (up * 70 - 10) * size * (1 - Math.abs(r() - 0.5)), (r() - 0.5) * 40);
+      s.renderOrder = up > 0.35 ? 1 : 0; cloud.add(s);
+    }
     cloud.position.set(Math.cos(a) * 1050 * Math.cos(el), 1050 * Math.sin(el), Math.sin(a) * 1050 * Math.cos(el)); cloud.lookAt(0, 0, 0);
     sky.add(cloud);
   }
 })();
-scene.add(new THREE.HemisphereLight(0xd8ecff, 0x6b7f3a, 1.5));
+scene.add(new THREE.HemisphereLight(0xd8ecff, 0x6b7f3a, 1.25));
 const sun = new THREE.DirectionalLight(0xfff3dc, 3.0);
 sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
 Object.assign(sun.shadow.camera, { left: -30, right: 30, top: 30, bottom: -30, near: 1, far: 200 });
@@ -108,6 +126,9 @@ function buildWorld(T) {
   if (world) { scene.remove(world); world.traverse(function (o) { if (o.geometry) o.geometry.dispose(); }); }
   world = new THREE.Group(); scene.add(world);
   const half = T.width / 2, STEPM = 2, SEA = T.y[T.L] - 5;   // the road ends at the beach, the sea just below
+  // the sun stands out over the sea, ahead of the riders, and glitters on the water
+  const way = new THREE.Vector3(T.x[T.L] - T.x[0], 0, T.z[T.L] - T.z[0]).normalize();
+  SUN_DIR.set(way.x * 0.75, 0.6, way.z * 0.75).normalize();
   // the road
   {
     const pos = [], uv = [], idx = [];
@@ -180,11 +201,17 @@ function buildWorld(T) {
   }
   // the sea, far below, all the way to the sky
   {
-    const sea = new THREE.Mesh(new THREE.PlaneGeometry(14000, 14000), new THREE.MeshStandardMaterial({ color: 0x1b7fb8, roughness: 0.18, metalness: 0.35 }));
+    // ripples: a wave normal map, so the sky and the sun glitter on it
+    const N = 256, data = new Uint8Array(N * N * 4), hgt = function (x, y) { const u = x / N * Math.PI * 2, v = y / N * Math.PI * 2; return Math.sin(u * 3 + v * 2) + 0.6 * Math.sin(u * 7 - v * 5 + 1) + 0.35 * Math.sin(u * 13 + v * 11 + 2) + 0.25 * Math.sin(-u * 19 + v * 17); };
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const dx = hgt(x + 1, y) - hgt(x - 1, y), dy = hgt(x, y + 1) - hgt(x, y - 1), l = Math.hypot(dx, dy, 0.25), i = (y * N + x) * 4;
+      data[i] = (-dx / l * 0.5 + 0.5) * 255; data[i + 1] = (-dy / l * 0.5 + 0.5) * 255; data[i + 2] = (0.25 / l * 0.5 + 0.5) * 255; data[i + 3] = 255;
+    }
+    const nrm = new THREE.DataTexture(data, N, N); nrm.wrapS = nrm.wrapT = THREE.RepeatWrapping; nrm.repeat.set(350, 350);
+    nrm.magFilter = THREE.LinearFilter; nrm.minFilter = THREE.LinearMipmapLinearFilter; nrm.generateMipmaps = true; nrm.anisotropy = renderer.capabilities.getMaxAnisotropy(); nrm.needsUpdate = true;
+    const sea = new THREE.Mesh(new THREE.PlaneGeometry(14000, 14000), new THREE.MeshStandardMaterial({ color: 0x1a78b8, roughness: 0.14, metalness: 0.05, normalMap: nrm, normalScale: new THREE.Vector2(0.3, 0.3), envMapIntensity: 1.3, fog: false }));
     sea.rotation.x = -Math.PI / 2; sea.position.set(T.x[T.L], SEA, T.z[T.L]); world.add(sea);
-    // surf along the shore: a pale band just over the sea where the land meets it
-    const surf = new THREE.Mesh(new THREE.PlaneGeometry(14000, 14000), new THREE.MeshBasicMaterial({ color: 0xbfe9ff, transparent: true, opacity: 0.35, depthWrite: false }));
-    surf.rotation.x = -Math.PI / 2; surf.position.set(T.x[T.L], SEA + 0.6, T.z[T.L]); world.add(surf);
+    world.userData.sea = nrm;
   }
   // a beach town where the road comes down: white and sand-coloured blocks along the shore
   {
@@ -298,7 +325,8 @@ function nearestRoad(T) {
     let y = ry - 0.35;
     const out = Math.max(0, dist - half - 2.2);
     // the valley side falls away steeply toward the sea, so the view opens down the hill
-    if (out > 0) y += side < 0 ? out * 0.3 + Math.pow(out / 70, 2) * 14 : -out * 0.8 - Math.pow(out / 40, 2) * 14;
+    // (the hill side only banks up a little, so no wall ever stands between the rider and the sea ahead)
+    if (out > 0) y += side < 0 ? 16 * (1 - Math.exp(-out / 18)) : -out * 0.8 - Math.pow(out / 40, 2) * 14;
     y += (nz - 0.5) * Math.min(1, out / 25) * 14;
     return { y: y, dist: dist, ry: ry, n: nz };
   };
@@ -449,8 +477,10 @@ function follow(dt, snap) {
   const p = R.racers[0], T = R.T;
   // close behind at head height, looking down the hill: the road drops away ahead, the sea below
   // (it looks above the road ahead, so the road is seen falling away under the horizon, not tilted flat)
-  const back = at(T, p.s - 4.2 - p.v * 0.04, p.d * 0.9), look = at(T, p.s + 20, p.d * 0.6);
-  const want = new THREE.Vector3(back.x, back.y + 2.6 + (p.crash ? 1.5 : 0), back.z), wantLook = new THREE.Vector3(look.x, want.y - 24 * 0.17, look.z);
+  // low and close, the rider big in the bottom half, the sea's horizon high in the frame
+  const back = at(T, p.s - 3.1 - p.v * 0.03, p.d * 0.92), look = at(T, p.s + 20, p.d * 0.6);
+  const tall = innerHeight > innerWidth;   // a phone held upright looks further down, the horizon in the top third
+  const want = new THREE.Vector3(back.x, back.y + (tall ? 2.0 : 1.8) + (p.crash ? 1.5 : 0), back.z), wantLook = new THREE.Vector3(look.x, want.y - 23 * (tall ? 0.3 : 0.17), look.z);
   if (snap) { camPos.copy(want); camLook.copy(wantLook); }
   camPos.lerp(want, Math.min(1, dt * 5)); camLook.lerp(wantLook, Math.min(1, dt * 7));
   camera.position.copy(camPos);
@@ -472,7 +502,7 @@ camera.add(streaks); scene.add(camera);
 const streakZ = new Float32Array(STREAKS);
 for (let i = 0; i < STREAKS; i++) streakZ[i] = -streakR() * 40;
 function wind(dt, v) {
-  streaks.material.opacity = Math.max(0, Math.min(0.45, (v - 14) / 30));
+  streaks.material.opacity = Math.max(0, Math.min(0.22, (v - 16) / 40));
   for (let i = 0; i < STREAKS; i++) {
     streakZ[i] += v * dt * 1.4;
     if (streakZ[i] > 0) { streakZ[i] = -30 - streakR() * 12; const a = streakR() * Math.PI * 2, rr = 2.2 + streakR() * 5; streakPos[i * 6] = Math.cos(a) * rr * 1.4; streakPos[i * 6 + 1] = Math.sin(a) * rr; }
@@ -588,6 +618,7 @@ function frame(now) {
   } else {
     if (R) { place(dt); menuCamera(dt); }
   }
+  if (world && world.userData.sea) { world.userData.sea.offset.x += dt * 0.004; world.userData.sea.offset.y += dt * 0.0025; }
   renderer.render(scene, camera);
 }
 
