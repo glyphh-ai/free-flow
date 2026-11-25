@@ -1,0 +1,36 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Free Flow: poses</title>
+<style>html,body{margin:0;background:#cfd8dc}canvas{display:block}</style>
+<script type="importmap">{"imports":{"three":"../vendor/three.module.js","three/addons/":"../vendor/addons/"}}</script>
+</head><body>
+<script type="module">
+// tools/pose.html : one person (?who=maya|dex|unit) in every pose (base, tuck, slide, fall), seen from behind as the
+// camera sees them in the race (top row) and from the side they face (bottom row), to set the poses by eye.
+import * as THREE from 'three';
+import { loadPeople, makeSkater, pose } from '../skater.js';
+import { makeBoard } from '../board.js';
+const q = new URLSearchParams(location.search), who = q.get('who') || 'maya';
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(innerWidth, innerHeight); r.setScissorTest(true); document.body.appendChild(r.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0xcfd8dc);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x667788, 2.2)); const sun = new THREE.DirectionalLight(0xffffff, 2); sun.position.set(3, 6, 4); scene.add(sun);
+scene.add(new THREE.GridHelper(80, 160));
+await loadPeople();
+const poses = [{ base: 1 }, { tuck: 1 }, { slide: 1 }, { fall: 1 }];
+poses.forEach(function (w, j) {
+  const g = new THREE.Group(); g.position.set(j * 20, 0, 0);
+  g.add(makeBoard({ deck: 'race', color: '#e4572e', wheel: '#ffd23f' }));
+  const S = makeSkater(who, q.get('tint') || null);
+  S.holder.position.y = 0.12; S.holder.rotation.y = Math.PI / 2; g.add(S.holder);
+  pose(S, w, +(q.get('lean') || 0), 0);
+  scene.add(g);
+});
+const W = innerWidth / 4, H = innerHeight / 2, cam = new THREE.PerspectiveCamera(30, W / H, 0.1, 100);
+poses.forEach(function (w, j) {
+  [0, 1].forEach(function (row) {
+    if (row === 0) cam.position.set(j * 20, 1.6, 4.2); else cam.position.set(j * 20 + 4.2, 1.2, 0);
+    cam.lookAt(j * 20, 0.75, 0);
+    r.setViewport(j * W, (1 - row) * H, W, H); r.setScissor(j * W, (1 - row) * H, W, H); r.render(scene, cam);
+  });
+});
+window.done = true;
+</script></body></html>

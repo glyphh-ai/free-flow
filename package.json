@@ -1,0 +1,14 @@
+{
+  "name": "free-flow",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node test/sim.mjs && node test/browser.mjs"
+  },
+  "dependencies": {
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.65.1"
+  }
+}
