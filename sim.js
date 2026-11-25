@@ -28,14 +28,15 @@ export function makeTrack(seed, length) {
   // far from the way down (its heading stays within about 25 degrees of the start's), so the view stays ahead
   let hd = 0;
   while (s < N) {
-    const len = 60 + r() * 130, roll = r();
+    // the road snakes down the ridge: left, right, left, few straights, now and then a tight one to slide
+    const len = 45 + r() * 90, roll = r();
     let c = 0;
-    if (roll < 0.35) c = 0;                                  // a straight
-    else if (roll < 0.85) c = 1 / (110 + r() * 220);         // a sweeper
-    else c = 1 / (45 + r() * 20);                            // a bend to slide
-    side = r() < 0.7 ? -side : side;
-    if (Math.abs(hd + c * side * len) > 0.42) side = -Math.sign(hd) || 1;
-    const turn = Math.min(len, c > 0 ? 0.5 / c : len);       // a sharp bend is short
+    if (roll < 0.15) c = 0;                                  // a short straight
+    else if (roll < 0.75) c = 1 / (70 + r() * 130);          // a sweeper
+    else c = 1 / (38 + r() * 20);                            // a bend to slide
+    side = r() < 0.85 ? -side : side;
+    if (Math.abs(hd + c * side * len) > 0.75) side = -Math.sign(hd) || 1;
+    const turn = Math.min(len, c > 0 ? 0.85 / c : len);      // a sharp bend is short
     const end = Math.min(N, Math.floor(s + turn));
     for (let i = Math.floor(s); i < end; i++) want[i] = c * side;
     hd += c * side * (end - Math.floor(s));

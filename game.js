@@ -161,7 +161,7 @@ function buildWorld(T) {
     // bright summer greens; the sea side's steep ground goes to rock; turquoise shallows and white surf on the shore
     const cGrass = new THREE.Color(0x4f9e2c), cDry = new THREE.Color(0x9cc24a), cRock = new THREE.Color(0xa49a8a), cShoulder = new THREE.Color(0x9c8f72), cSand = new THREE.Color(0xf0e2b8);
     const cFoam = new THREE.Color(0xffffff), cShallow = new THREE.Color(0x3fd6cf), cDeep = new THREE.Color(0x1676b0), c = new THREE.Color();
-    for (let i = 0; i < p.count; i++) { const h = ground(p.getX(i), p.getZ(i)); p.setY(i, h.y); hs[i] = h.dist < half + 1.6 ? -1 : h.n; }
+    for (let i = 0; i < p.count; i++) { const h = ground(p.getX(i), p.getZ(i)); p.setY(i, h.y); hs[i] = h.dist < half + 0.9 ? -1 : h.n; }
     g.computeVertexNormals();
     const nm = g.attributes.normal;
     for (let i = 0; i < p.count; i++) {
