@@ -9,7 +9,6 @@ import { loadPeople, makeSkater, pose, PEOPLE } from './skater.js';
 import { makeBoard, GRAPHICS } from './board.js';
 import { makeHair, stepHair, makeSmoke, makeSun } from './effects.js';
 import { makeMusic } from './music.js';
-import { toonify, makeLook, makeCloudTowers, makeIslands } from './toon.js';
 
 const Q = new URLSearchParams(location.search);
 const BOT = Q.has('bot'), FAST = Math.max(1, +Q.get('fast') || 1), MUTE = Q.has('mute');
@@ -39,7 +38,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'hi
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.toneMapping = THREE.NeutralToneMapping; renderer.toneMappingExposure = 1.05;   // keeps colours pure
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.15;
 document.body.prepend(renderer.domElement);
 renderer.domElement.style.filter = 'saturate(1.3) contrast(1.05)';   // the bright, clean colour of an anime summer
 const scene = new THREE.Scene();
@@ -48,7 +47,6 @@ scene.fog = new THREE.Fog(FOG, 1500, 9000);
 const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.2, 30000);
 addEventListener('resize', function () { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); smoke.resize(innerHeight); });
 const smoke = makeSmoke(); scene.add(smoke.points); smoke.resize(innerHeight);
-const look = makeLook(renderer, scene, camera);   // cel shading's ink lines and glow
 
 // a clear coast sky: a big sphere coloured from the horizon up, and clouds
 (function () {
@@ -111,7 +109,7 @@ function speckle(x, w, h, base, n, spread) {
   for (let i = 0; i < w * h / 6; i++) { const v = Math.floor((r() - 0.5) * spread); x.fillStyle = 'rgba(' + (v > 0 ? '255,255,255,' : '0,0,0,') + Math.abs(v) / 255 + ')'; x.fillRect(r() * w, r() * h, 2, 2); }
 }
 const asphalt = canvasTex(256, 512, function (x, w, h) {
-  speckle(x, w, h, '#4f5562', 3, 22);   // painted-flat asphalt, a little blue, as anime draws it
+  speckle(x, w, h, '#45474b', 3, 70);
   x.fillStyle = '#ece8df'; x.fillRect(8, 0, 6, h); x.fillRect(w - 14, 0, 6, h);         // the edge lines
   x.fillStyle = '#f2c230'; x.fillRect(w / 2 - 5, 0, 4, h * 0.5); x.fillRect(w / 2 + 1, 0, 4, h * 0.5);   // the middle: a broken double yellow
 }, true);
@@ -257,7 +255,7 @@ function buildWorld(T) {
     const nrm = new THREE.DataTexture(data, N, N); nrm.wrapS = nrm.wrapT = THREE.RepeatWrapping; nrm.repeat.set(1500, 1500);
     nrm.magFilter = THREE.LinearFilter; nrm.minFilter = THREE.LinearMipmapLinearFilter; nrm.generateMipmaps = true; nrm.anisotropy = renderer.capabilities.getMaxAnisotropy(); nrm.needsUpdate = true;
     const sea = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000), new THREE.MeshStandardMaterial({ color: 0x1585c4, roughness: 0.2, metalness: 0.05, normalMap: nrm, normalScale: new THREE.Vector2(0.3, 0.3), envMapIntensity: 0.55, fog: false, transparent: true, opacity: 0.62, depthWrite: false }));
-    sea.renderOrder = 1; sea.material.userData.keep = true;   // the sea stays glossy, mirroring the sky
+    sea.renderOrder = 1;
     sea.rotation.x = -Math.PI / 2; sea.position.set(T.x[T.L], SEA, T.z[T.L]); world.add(sea);
     world.userData.sea = nrm;
   }
@@ -371,11 +369,7 @@ function buildWorld(T) {
     if (f[1] === 'FINISH') { const line = new THREE.Mesh(new THREE.PlaneGeometry(T.width, 0.6), new THREE.MeshBasicMaterial({ color: 0xffffff })); line.rotation.x = -Math.PI / 2; line.position.y = 0.035; g.add(line); }
     world.add(g);
   });
-  // the anime sky's giants: cloud towers kilometres out over the sea, and islands fading into the air
-  const mid = new THREE.Vector3(T.x[T.L], 0, T.z[T.L]);
-  world.add(makeCloudTowers(mid, SEA, way, SUN_DIR, T.seed), makeIslands(mid, SEA, way, T.seed, FOG));
   world.userData.ground = ground;
-  toonify(world);
 }
 
 // for any point: the road nearest it (a grid of road samples, searched round the point), and so the ground's height.
@@ -448,8 +442,7 @@ function makeRider(o) {
   scene.add(g);
   // long hair streams back in the wind
   const P = PEOPLE[o.who], hair = P.hair ? makeHair(S, P.hair, P.hairLength) : null;
-  if (hair) { scene.add(hair.group); toonify(hair.group); }
-  toonify(g);
+  if (hair) scene.add(hair.group);
   return { g: g, turn: turn, board: board, S: S, o: o, vibe: VIBES[o.vibe] || VIBES.chill, roll: 0, yaw: 0, spin: 0, hair: hair };
 }
 function dropRider(r) { scene.remove(r.g); if (r.hair) scene.remove(r.hair.group); r.g.traverse(function (o) { if (o.geometry && !o.isSkinnedMesh) o.geometry.dispose(); }); }
@@ -597,21 +590,21 @@ function place(dt) {
 
 function follow(dt, snap) {
   const p = R.racers[0], T = R.T;
-  // close behind at head height, looking down the hill: the road drops away ahead, the sea below
-  // (it looks above the road ahead, so the road is seen falling away under the horizon, not tilted flat)
-  // low and close, the rider big in the bottom half, the sea's horizon high in the frame
-  const back = at(T, p.s - 2.3 - p.v * 0.015, p.d * 0.95), look = at(T, p.s + 20, p.d * 0.7);
-  const tall = innerHeight > innerWidth;   // a phone held upright looks further down, the horizon in the top third
-  const want = new THREE.Vector3(back.x, back.y + (tall ? 2.3 : 2.0) + (p.crash ? 1.5 : 0), back.z), wantLook = new THREE.Vector3(look.x, want.y - 22 * (tall ? 0.5 : 0.42), look.z);
+  // right behind the rider, just over her head, looking down the hill past her: she fills the middle of the frame,
+  // the board near the bottom, the road dropping away and the sea's horizon in the top quarter
+  // (heights from where she is, not from the road behind, which is higher on a hill this steep)
+  const tall = innerHeight > innerWidth;
+  const back = at(T, p.s - (tall ? 2.2 : 2.8), p.d), look = at(T, p.s + 20, p.d * 0.8), here = at(T, p.s, p.d);
+  const want = new THREE.Vector3(back.x, here.y + (tall ? 2.6 : 2.4) + (p.crash ? 1.5 : 0), back.z), wantLook = new THREE.Vector3(look.x, want.y - 20 * (tall ? 0.4 : 0.29), look.z);
   if (snap) { camPos.copy(want); camLook.copy(wantLook); }
-  camPos.lerp(want, Math.min(1, dt * 5)); camLook.lerp(wantLook, Math.min(1, dt * 7));
+  camPos.lerp(want, Math.min(1, dt * 9)); camLook.lerp(wantLook, Math.min(1, dt * 9));
   camera.position.copy(camPos);
   const sp = riders[0] ? p.v : 0;
   if (p.bump > 0) camera.position.y += (Math.random() - 0.5) * 0.12;
   // the board buzzing over the asphalt at speed
   const buzz = Math.max(0, p.v - 20) * 0.0025; camera.position.x += (Math.random() - 0.5) * buzz; camera.position.y += (Math.random() - 0.5) * buzz;
   camera.lookAt(camLook);
-  camera.fov += (64 + Math.min(24, sp * 0.6) - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix();
+  camera.fov += ((tall ? 76 : 60) + Math.min(10, sp * 0.3) - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix();
   wind(dt, sp);
   const me = riders[0].g.position;
   sun.position.copy(me).addScaledVector(SUN_DIR, 80); sun.target.position.copy(me);
@@ -767,7 +760,7 @@ function frame(now) {
     if (R) { place(dt); menuCamera(dt); }
   }
   if (world && world.userData.sea) { world.userData.sea.offset.x += dt * 0.004; world.userData.sea.offset.y += dt * 0.0025; }
-  look.render();
+  renderer.render(scene, camera);
 }
 
 window.ffDebug = function () { const h = riders[0].hair; if (!h) return 'no hair'; const v = new THREE.Vector3(); h.head.getWorldPosition(v); return { v: R.racers[0].v, head: v.toArray().map(function (n) { return +n.toFixed(2); }), strand: h.strands[0].pts.map(function (p) { return p.clone().sub(v).toArray().map(function (n) { return +n.toFixed(2); }); }), visible: h.group.visible, inScene: !!h.group.parent }; };
