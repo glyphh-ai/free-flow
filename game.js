@@ -40,19 +40,20 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.15;
 document.body.prepend(renderer.domElement);
+renderer.domElement.style.filter = 'saturate(1.3) contrast(1.05)';   // the bright, clean colour of an anime summer
 const scene = new THREE.Scene();
 const SKY = new THREE.Color(0xe4f1fa), FOG = new THREE.Color(0xc4dcef), FAR_SEA = new THREE.Color(0x3d8cc0);
-scene.fog = new THREE.Fog(FOG, 150, 2200);
-const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 3200);
+scene.fog = new THREE.Fog(FOG, 1500, 9000);
+const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.2, 30000);
 addEventListener('resize', function () { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); smoke.resize(innerHeight); });
 const smoke = makeSmoke(); scene.add(smoke.points); smoke.resize(innerHeight);
 
 // a clear coast sky: a big sphere coloured from the horizon up, and clouds
 (function () {
-  const g = new THREE.SphereGeometry(1200, 32, 16), c = [], top = new THREE.Color(0x1f6fd1), mid = new THREE.Color(0x6aaee8), low = SKY;
+  const g = new THREE.SphereGeometry(1200, 48, 96), c = [], top = new THREE.Color(0x1f6fd1), mid = new THREE.Color(0x6aaee8), low = SKY;
   for (let i = 0; i < g.attributes.position.count; i++) {
     // below the horizon the dome is the far sea, so there is always a clean line where sea meets sky
-    const y = g.attributes.position.getY(i) / 1200, col = y < -0.004 ? FAR_SEA.clone().lerp(new THREE.Color(0x0b4f82), Math.min(1, -y * 4)) : y > 0.25 ? mid.clone().lerp(top, Math.min(1, (y - 0.25) / 0.6)) : low.clone().lerp(mid, Math.max(0, y / 0.25));
+    const y = g.attributes.position.getY(i) / 1200, col = y < 0.001 ? FAR_SEA.clone().lerp(new THREE.Color(0x0b4f82), Math.min(1, -y * 4)) : y > 0.25 ? mid.clone().lerp(top, Math.min(1, (y - 0.25) / 0.6)) : low.clone().lerp(mid, Math.max(0, y / 0.25));
     c.push(col.r, col.g, col.b);
   }
   g.setAttribute('color', new THREE.Float32BufferAttribute(c, 3));
@@ -112,7 +113,7 @@ const asphalt = canvasTex(256, 512, function (x, w, h) {
   x.fillStyle = '#ece8df'; x.fillRect(8, 0, 6, h); x.fillRect(w - 14, 0, 6, h);         // the edge lines
   x.fillStyle = '#f2c230'; x.fillRect(w / 2 - 5, 0, 4, h * 0.5); x.fillRect(w / 2 + 1, 0, 4, h * 0.5);   // the middle: a broken double yellow
 }, true);
-const grass = canvasTex(256, 256, function (x, w, h) { speckle(x, w, h, '#6f8a3f', 5, 90); }, true);
+const grass = canvasTex(256, 256, function (x, w, h) { speckle(x, w, h, '#f2f2f2', 5, 70); }, true);   // tinted by the ground's colours
 grass.repeat.set(1, 1);
 // the town's walls: rows of windows on a pale wall (each block is tinted its own colour)
 function windows() {
@@ -130,9 +131,10 @@ function buildWorld(T) {
   if (world) { scene.remove(world); world.traverse(function (o) { if (o.geometry) o.geometry.dispose(); }); }
   world = new THREE.Group(); scene.add(world);
   const half = T.width / 2, STEPM = 2, SEA = T.y[T.L] - 5;   // the road ends at the beach, the sea just below
-  // the sun stands out over the sea, ahead of the riders, and glitters on the water
+  // a high summer sun behind the riders and over the town side, so the riders, the trees and the houses are lit
+  // bright and throw their shadows ahead, down the hill
   const way = new THREE.Vector3(T.x[T.L] - T.x[0], 0, T.z[T.L] - T.z[0]).normalize();
-  SUN_DIR.set(way.x * 0.95, 0.33, way.z * 0.95).normalize();   // low, so it sits in the view and glitters on the sea
+  SUN_DIR.set(-way.x * 0.45 - way.z * 0.4, 0.8, -way.z * 0.45 + way.x * 0.4).normalize();
   sunDisc.position.copy(SUN_DIR).multiplyScalar(1000);
   // the road
   {
@@ -150,16 +152,25 @@ function buildWorld(T) {
   const near = nearestRoad(T);
   const lo = { x: 1e9, z: 1e9 }, hi = { x: -1e9, z: -1e9 };
   for (let i = 0; i <= T.L; i += 10) { lo.x = Math.min(lo.x, T.x[i]); lo.z = Math.min(lo.z, T.z[i]); hi.x = Math.max(hi.x, T.x[i]); hi.z = Math.max(hi.z, T.z[i]); }
-  const PAD = 380, CELL = 6, gx = Math.ceil((hi.x - lo.x + PAD * 2) / CELL), gz = Math.ceil((hi.z - lo.z + PAD * 2) / CELL);
+  const PAD = 650, CELL = 7, gx = Math.ceil((hi.x - lo.x + PAD * 2) / CELL), gz = Math.ceil((hi.z - lo.z + PAD * 2) / CELL);
   const ground = function (x, z) { return near(x, z); };
   {
     const g = new THREE.PlaneGeometry(gx * CELL, gz * CELL, gx, gz); g.rotateX(-Math.PI / 2);
     g.translate((lo.x + hi.x) / 2, 0, (lo.z + hi.z) / 2);
-    const p = g.attributes.position, col = [];
-    const cGrass = new THREE.Color(0x5e9a35), cDry = new THREE.Color(0x9db455), cRock = new THREE.Color(0x9a9183), cShoulder = new THREE.Color(0x8a7a5c), cSand = new THREE.Color(0xe8d6a8);
+    const p = g.attributes.position, col = [], hs = new Float32Array(p.count);
+    // bright summer greens; the sea side's steep ground goes to rock; turquoise shallows and white surf on the shore
+    const cGrass = new THREE.Color(0x4f9e2c), cDry = new THREE.Color(0x9cc24a), cRock = new THREE.Color(0xa49a8a), cShoulder = new THREE.Color(0x9c8f72), cSand = new THREE.Color(0xf0e2b8);
+    const cFoam = new THREE.Color(0xffffff), cShallow = new THREE.Color(0x3fd6cf), cDeep = new THREE.Color(0x1676b0), c = new THREE.Color();
+    for (let i = 0; i < p.count; i++) { const h = ground(p.getX(i), p.getZ(i)); p.setY(i, h.y); hs[i] = h.dist < half + 1.6 ? -1 : h.n; }
+    g.computeVertexNormals();
+    const nm = g.attributes.normal;
     for (let i = 0; i < p.count; i++) {
-      const h = ground(p.getX(i), p.getZ(i)); p.setY(i, h.y);
-      const c = h.dist < half + 1.6 ? cShoulder : h.y < SEA + 4 ? cSand : cGrass.clone().lerp(cDry, h.n * 0.7).lerp(cRock, Math.min(1, Math.max(0, (Math.abs(h.y - h.ry) - 30) / 60)));
+      const y = p.getY(i) - SEA, steep = 1 - nm.getY(i);
+      if (hs[i] < 0) c.copy(cShoulder);
+      else if (y < -1.2) c.copy(cShallow).lerp(cDeep, Math.min(1, (-1.2 - y) / 9));
+      else if (y < 0.5) c.copy(cFoam);
+      else if (y < 2.2) c.copy(cSand);
+      else c.copy(cGrass).lerp(cDry, hs[i] * 0.6).lerp(cRock, Math.min(1, Math.max(0, (steep - 0.25) * 3)));
       col.push(c.r, c.g, c.b);
     }
     g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
@@ -186,23 +197,52 @@ function buildWorld(T) {
     for (let s = 0; s < T.L - 2 && k < n; s += 4) [-1, 1].forEach(function (side) { const a = at(T, s, side * (half + 0.45)); M.makeTranslation(a.x, a.y + 0.4, a.z); posts.setMatrixAt(k++, M); });
     posts.count = k; world.add(posts);
   }
-  // trees: pines, thick on the mountain side, never on the road
+  // trees and bushes: round, leafy, bright green, in clumps down both slopes and over the plain; low bushes along the
+  // road's edge; grey rocks on the sea side's steep ground
   {
-    const r = rng(T.seed * 3 + 11), N = 2600;
-    const crown = new THREE.InstancedMesh(new THREE.ConeGeometry(1, 1, 7), new THREE.MeshStandardMaterial({ color: 0x2f5a36, roughness: 0.95, flatShading: true }), N * 2);
-    const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.12, 0.18, 1, 5), new THREE.MeshStandardMaterial({ color: 0x5a4030, roughness: 1 }), N);
-    crown.castShadow = true;
-    const M = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), cc = new THREE.Color();
-    let c = 0, t = 0;
-    for (let i = 0; i < N; i++) {
-      // few on the sea side, and none close to the road there, so the view down to the water stays open
-      const s = r() * T.L, side = r() < 0.8 ? -1 : 1, d = side * (half + (side > 0 ? 22 : 4) + Math.pow(r(), 1.6) * 140), a = at(T, s, d), h = ground(a.x, a.z);
-      if (h.dist < half + 3.5 || h.y < SEA + 2) continue;
-      const H = 7 + r() * 9, R = H * (0.26 + r() * 0.08);
-      ps.set(a.x, h.y + H * 0.15, a.z); sc.set(0.5, H * 0.3, 0.5); M.compose(ps, q, sc); trunk.setMatrixAt(t++, M);
-      for (let j = 0; j < 2; j++) { ps.set(a.x, h.y + H * (0.55 + j * 0.25), a.z); sc.set(R * (1 - j * 0.35), H * (0.6 - j * 0.15), R * (1 - j * 0.35)); M.compose(ps, q, sc); crown.setMatrixAt(c, M); crown.setColorAt(c++, cc.setHSL(0.26 + r() * 0.08, 0.45 + r() * 0.2, 0.24 + r() * 0.12)); }
+    const r = rng(T.seed * 3 + 11), N = 5000;
+    const leaf = new THREE.IcosahedronGeometry(1, 1);
+    const crown = new THREE.InstancedMesh(leaf, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 }), N * 3);
+    const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.14, 0.22, 1, 5), new THREE.MeshStandardMaterial({ color: 0x6a4a32, roughness: 1 }), N);
+    const rocks = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: 0xb3ab9c, roughness: 1, flatShading: true }), 900);
+    crown.castShadow = true; rocks.castShadow = true; rocks.receiveShadow = true;
+    const M = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), cc = new THREE.Color();
+    let c = 0, t = 0, k = 0;
+    const tree = function (x, y, z, H, bush) {
+      if (!bush) { ps.set(x, y + H * 0.2, z); sc.set(1, H * 0.45, 1); q.identity(); M.compose(ps, q, sc); trunk.setMatrixAt(t++, M); }
+      const R = bush ? H : H * (0.32 + r() * 0.1), n = bush ? 1 + Math.floor(r() * 2) : 2 + Math.floor(r() * 2);
+      const hue = 0.24 + r() * 0.07, sat = 0.55 + r() * 0.25, lit = 0.28 + r() * 0.14;
+      for (let j = 0; j < n && c < N * 3; j++) {
+        const o = j ? R * 0.55 : 0, a = r() * 6.28;
+        ps.set(x + Math.cos(a) * o, y + (bush ? R * 0.6 : H * 0.62) + (j ? R * (r() * 0.5 - 0.1) : 0), z + Math.sin(a) * o);
+        const s = R * (j ? 0.7 + r() * 0.2 : 1); sc.set(s, s * 0.88, s); e.set(r(), r() * 6, r()); q.setFromEuler(e);
+        M.compose(ps, q, sc); crown.setMatrixAt(c, M); crown.setColorAt(c++, cc.setHSL(hue, sat, lit * (j ? 1.12 : 1)));
+      }
+    };
+    for (let i = 0; i < N && t < N; i++) {
+      // a clump: a few trees together, some way off the road (more on the town side, so the sea stays in view)
+      const s = r() * T.L, side = r() < 0.4 ? -1 : 1, d = side * (half + 14 + Math.pow(r(), 1.4) * (side > 0 ? 420 : 200)), a = at(T, s, d);
+      const n = 1 + Math.floor(r() * 5);
+      for (let j = 0; j < n; j++) {
+        const x = a.x + (r() - 0.5) * 14, z = a.z + (r() - 0.5) * 14, h = ground(x, z);
+        if (h.dist < half + 10 || h.y < SEA + 2.5) continue;
+        tree(x, h.y - 0.3, z, 5 + r() * 7, false);
+      }
     }
-    crown.count = c; trunk.count = t; world.add(crown, trunk);
+    // bushes just off the road's edge, so the road reads as running through green
+    for (let s = 6; s < T.L; s += 3 + r() * 5) [-1, 1].forEach(function (side) {
+      if (r() < 0.35) return;
+      const a = at(T, s, side * (half + 2.4 + r() * 4)), h = ground(a.x, a.z);
+      if (h.y > SEA + 2.5) tree(a.x, h.y - 0.4, a.z, 0.7 + r() * 1.1, true);
+    });
+    // rocks on the cliffs and at the water's edge
+    for (let i = 0; i < 6000 && k < 900; i++) {
+      const s = r() * T.L, a = at(T, s, -(half + 10 + r() * 260)), h = ground(a.x, a.z);
+      if (h.y < SEA - 3 || (h.y > SEA + 6 && r() < 0.8)) continue;
+      const R = 1 + Math.pow(r(), 2) * 6; ps.set(a.x, h.y + R * 0.1, a.z); e.set(r() * 3, r() * 6, r() * 3); q.setFromEuler(e); sc.set(R, R * (0.5 + r() * 0.4), R * (0.8 + r() * 0.4));
+      M.compose(ps, q, sc); rocks.setMatrixAt(k++, M);
+    }
+    crown.count = c; trunk.count = t; rocks.count = k; world.add(crown, trunk, rocks);
   }
   // the sea, far below, all the way to the sky
   {
@@ -212,29 +252,58 @@ function buildWorld(T) {
       const dx = hgt(x + 1, y) - hgt(x - 1, y), dy = hgt(x, y + 1) - hgt(x, y - 1), l = Math.hypot(dx, dy, 0.25), i = (y * N + x) * 4;
       data[i] = (-dx / l * 0.5 + 0.5) * 255; data[i + 1] = (-dy / l * 0.5 + 0.5) * 255; data[i + 2] = (0.25 / l * 0.5 + 0.5) * 255; data[i + 3] = 255;
     }
-    const nrm = new THREE.DataTexture(data, N, N); nrm.wrapS = nrm.wrapT = THREE.RepeatWrapping; nrm.repeat.set(350, 350);
+    const nrm = new THREE.DataTexture(data, N, N); nrm.wrapS = nrm.wrapT = THREE.RepeatWrapping; nrm.repeat.set(1500, 1500);
     nrm.magFilter = THREE.LinearFilter; nrm.minFilter = THREE.LinearMipmapLinearFilter; nrm.generateMipmaps = true; nrm.anisotropy = renderer.capabilities.getMaxAnisotropy(); nrm.needsUpdate = true;
-    const sea = new THREE.Mesh(new THREE.PlaneGeometry(14000, 14000), new THREE.MeshStandardMaterial({ color: 0x1a78b8, roughness: 0.14, metalness: 0.05, normalMap: nrm, normalScale: new THREE.Vector2(0.3, 0.3), envMapIntensity: 1.3, fog: false }));
+    const sea = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000), new THREE.MeshStandardMaterial({ color: 0x1585c4, roughness: 0.2, metalness: 0.05, normalMap: nrm, normalScale: new THREE.Vector2(0.3, 0.3), envMapIntensity: 0.55, fog: false, transparent: true, opacity: 0.62, depthWrite: false }));
+    sea.renderOrder = 1;
     sea.rotation.x = -Math.PI / 2; sea.position.set(T.x[T.L], SEA, T.z[T.L]); world.add(sea);
     world.userData.sea = nrm;
   }
-  // a beach town where the road comes down: white and sand-coloured blocks along the shore
+  // the town on the plain: small houses in rows along little streets, pale walls and red, orange and blue roofs
   {
-    const r = rng(T.seed + 17), N = 700, end = { x: T.x[T.L], z: T.z[T.L] };
+    const r = rng(T.seed + 17), N = 1600;
     const box = new THREE.BoxGeometry(1, 1, 1); box.translate(0, 0.5, 0);
-    const town = new THREE.InstancedMesh(box, new THREE.MeshStandardMaterial({ map: windows(), roughness: 0.7 }), N);
-    town.castShadow = true; town.receiveShadow = true;
-    const M = new THREE.Matrix4(), q = new THREE.Quaternion(), ps = new THREE.Vector3(), sc = new THREE.Vector3(), cc = new THREE.Color();
+    const roof = new THREE.ConeGeometry(0.75, 1, 4); roof.rotateY(Math.PI / 4); roof.translate(0, 0.5, 0);
+    const walls = new THREE.InstancedMesh(box, new THREE.MeshStandardMaterial({ map: windows(), roughness: 0.8 }), N);
+    const roofs = new THREE.InstancedMesh(roof, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7, flatShading: true }), N);
+    walls.castShadow = roofs.castShadow = true; walls.receiveShadow = true;
+    const M = new THREE.Matrix4(), q = new THREE.Quaternion(), ps = new THREE.Vector3(), sc = new THREE.Vector3(), cc = new THREE.Color(), Y = new THREE.Vector3(0, 1, 0);
+    const wallC = [0xfaf6ee, 0xf3e3c8, 0xf6d6cf, 0xdbe9f2, 0xfff4d6, 0xe9e2f3], roofC = [0xd4502f, 0xe07a33, 0xc23b32, 0x3f6fb5, 0x2f8f9a, 0xb5562e];
     let n = 0;
-    for (let i = 0; i < N * 8 && n < N; i++) {
-      const a = r() * Math.PI * 2, d = 30 + Math.sqrt(r()) * 900, x = end.x + Math.cos(a) * d, z = end.z + Math.sin(a) * d, h = ground(x, z);
-      if (h.y < SEA + 1 || h.y > SEA + 35 || h.dist < half + 8) continue;
-      const tall = d < 400 && r() < 0.35 ? 20 + r() * 55 : 5 + r() * 12, w = 8 + r() * 14;
-      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.round(r() * 4) * Math.PI / 2 + T.h[T.L]);
-      ps.set(x, h.y - 1, z); sc.set(w, tall, 8 + r() * 12); M.compose(ps, q, sc); town.setMatrixAt(n, M);
-      town.setColorAt(n++, cc.setHSL(0.1 + r() * 0.05, 0.25 * r(), 0.78 + r() * 0.18));
+    // the streets: blocks around points on the plain, each turned its own way
+    for (let b = 0; b < 400 && n < N; b++) {
+      const s = 0.15 * T.L + r() * 0.95 * T.L, a = at(T, Math.min(T.L, s), half + 60 + r() * 520), h0 = ground(a.x, a.z);
+      if (h0.y > SEA + 16 || h0.y < SEA + 2.5) continue;
+      const ang = r() * Math.PI, ca = Math.cos(ang), sa = Math.sin(ang), rows = 2 + Math.floor(r() * 3), cols = 3 + Math.floor(r() * 5);
+      q.setFromAxisAngle(Y, -ang);
+      for (let i = 0; i < rows; i++) for (let j = 0; j < cols && n < N; j++) {
+        if (r() < 0.15) continue;
+        const u = (j - cols / 2) * 11, v = (i - rows / 2) * 13, x = a.x + u * ca - v * sa, z = a.z + u * sa + v * ca, h = ground(x, z);
+        if (h.y < SEA + 2.2 || h.dist < half + 8) continue;
+        const w = 6 + r() * 3, dd = 6 + r() * 3, ht = 3.5 + r() * (r() < 0.2 ? 6 : 2.5);
+        ps.set(x, h.y - 0.6, z); sc.set(w, ht + 0.6, dd); M.compose(ps, q, sc); walls.setMatrixAt(n, M); walls.setColorAt(n, cc.set(wallC[Math.floor(r() * wallC.length)]));
+        ps.set(x, h.y + ht, z); sc.set(w * 1.02, 2 + r() * 1.5, dd * 1.02); M.compose(ps, q, sc); roofs.setMatrixAt(n, M); roofs.setColorAt(n++, cc.set(roofC[Math.floor(r() * roofC.length)]));
+      }
     }
-    town.count = n; world.add(town);
+    walls.count = roofs.count = n; world.add(walls, roofs);
+  }
+  // a lighthouse, red and white, on a point of the coast below the road
+  {
+    let spot = null;
+    for (let s = Math.floor(T.L * 0.55); s < T.L * 0.95 && !spot; s += 25) for (let d = 30; d < 500; d += 6) {
+      const a = at(T, s, -(half + d)), h = ground(a.x, a.z);
+      if (h.y < SEA + 7) { if (h.y > SEA + 2.5) spot = { x: a.x, y: h.y, z: a.z }; break; }
+    }
+    if (spot) {
+      const tex = canvasTex(64, 256, function (x, w, h) { for (let i = 0; i < 6; i++) { x.fillStyle = i % 2 ? '#ffffff' : '#d8312b'; x.fillRect(0, i * h / 6, w, h / 6); } });
+      const g = new THREE.Group(); g.position.set(spot.x, spot.y - 0.5, spot.z); g.scale.setScalar(1.6);
+      const tower = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 2.3, 16, 20), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6 })); tower.position.y = 8; tower.castShadow = true; g.add(tower);
+      const lamp = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 1.8, 16), new THREE.MeshStandardMaterial({ color: 0xfff6c8, emissive: 0xffe9a0, emissiveIntensity: 0.6 })); lamp.position.y = 16.9; g.add(lamp);
+      const cap = new THREE.Mesh(new THREE.ConeGeometry(1.6, 1.8, 16), new THREE.MeshStandardMaterial({ color: 0xc22a24, roughness: 0.5 })); cap.position.y = 18.7; g.add(cap);
+      const deck = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 0.3, 20), new THREE.MeshStandardMaterial({ color: 0x333333 })); deck.position.y = 16; g.add(deck);
+      const hut = new THREE.Mesh(new THREE.BoxGeometry(5, 3, 4), new THREE.MeshStandardMaterial({ color: 0xfaf6ee })); hut.position.set(3.5, 1.5, 0); hut.castShadow = true; g.add(hut);
+      world.add(g);
+    }
   }
   // power poles down the valley side, wires sagging between them
   {
@@ -303,11 +372,14 @@ function buildWorld(T) {
   world.userData.ground = ground;
 }
 
-// for any point: the road nearest it (a grid of road samples, searched round the point), and so the ground's height
+// for any point: the road nearest it (a grid of road samples, searched round the point), and so the ground's height.
+// The road runs along a ridge: the land falls away on both sides, to rocks and the sea on the left and to a coastal
+// plain, where the town is, on the right.
 function nearestRoad(T) {
   const B = 20, cells = new Map();
   for (let i = 0; i <= T.L; i += 2) { const k = Math.floor(T.x[i] / B) + ',' + Math.floor(T.z[i] / B); if (!cells.has(k)) cells.set(k, []); cells.get(k).push(i); }
-  const half = T.width / 2, noise = function (x, z) { return Math.sin(x * 0.031 + Math.sin(z * 0.017) * 2) * Math.cos(z * 0.027 + x * 0.006) * 0.5 + 0.5; };
+  const half = T.width / 2, SEA = T.y[T.L] - 5, noise = function (x, z) { return Math.sin(x * 0.031 + Math.sin(z * 0.017) * 2) * Math.cos(z * 0.027 + x * 0.006) * 0.5 + 0.5; };
+  const big = function (x, z) { return Math.sin(x * 0.0071 + Math.cos(z * 0.0053) * 1.7) * Math.cos(z * 0.0083 - x * 0.0029); };
   return function (x, z) {
     const cx = Math.floor(x / B), cz = Math.floor(z / B);
     let best = -1, bd = 1e18;
@@ -320,20 +392,37 @@ function nearestRoad(T) {
       if (best >= 0 && rr < 2) { rr++; for (let i = cx - rr; i <= cx + rr; i++) for (let j = cz - rr; j <= cz + rr; j++) { const l = cells.get(i + ',' + j); if (l) for (const n of l) { const dx = x - T.x[n], dz = z - T.z[n], d2 = dx * dx + dz * dz; if (d2 < bd) { bd = d2; best = n; } } } }
     }
     const nz = noise(x, z);
-    if (best < 0) return { y: T.y[T.L] - 120, dist: 999, ry: T.y[T.L], n: nz };
-    let dist = Math.sqrt(bd), ry = T.y[best];
-    // past the bottom of the road: the beach, and the land sinking under the sea
-    const along = best >= T.L - 2 ? (x - T.x[T.L]) * Math.sin(T.h[T.L]) - (z - T.z[T.L]) * Math.cos(T.h[T.L]) : 0;
-    if (along > 0) return { y: ry - 1 - along * 0.06 - Math.max(0, along - 60) * 0.25, dist: dist, ry: ry, n: nz };
-    // which side: the mountain is to the left of the way down, the valley to the right
-    const side = (x - T.x[best]) * Math.cos(T.h[best]) + (z - T.z[best]) * Math.sin(T.h[best]);
-    let y = ry - 0.35;
-    const out = Math.max(0, dist - half - 2.2);
-    // the valley side falls away steeply toward the sea, so the view opens down the hill
-    // (the hill side only banks up a little, so no wall ever stands between the rider and the sea ahead)
-    if (out > 0) y += side < 0 ? 16 * (1 - Math.exp(-out / 18)) : -out * 0.8 - Math.pow(out / 40, 2) * 14;
-    y += (nz - 0.5) * Math.min(1, out / 25) * 14;
-    return { y: y, dist: dist, ry: ry, n: nz };
+    if (best < 0) {
+      // far from every road: the nearest by a coarse search over the whole road
+      for (let i = 0; i <= T.L; i += 6) { const dx = x - T.x[i], dz = z - T.z[i], d2 = dx * dx + dz * dz; if (d2 < bd) { bd = d2; best = i; } }
+      const c = best;
+      for (let i = Math.max(0, c - 6); i <= Math.min(T.L, c + 6); i++) { const dx = x - T.x[i], dz = z - T.z[i], d2 = dx * dx + dz * dz; if (d2 < bd) { bd = d2; best = i; } }
+    }
+    const dist = Math.sqrt(bd), ry = T.y[best], H = Math.max(4, ry - SEA);
+    const dx = x - T.x[best], dz = z - T.z[best];
+    const fwd = dx * Math.sin(T.h[best]) - dz * Math.cos(T.h[best]), side = dx * Math.cos(T.h[best]) + dz * Math.sin(T.h[best]);
+    const out = Math.max(0, dist - half - 2.2), wob = big(x, z);
+    let y;
+    if (best >= T.L - 1 && fwd > 0) {
+      // past the bottom of the road: a beach, then the sea floor
+      y = ry - 1 - fwd * 0.05 - Math.max(0, fwd - 50) * 0.3;
+    } else if (side < 0) {
+      // the sea side: the ridge falls steeply to rocks and the water, nearer as the road comes down
+      // (a rounded fall: gentle beside the road, then plunging, so the road rides on a broad green ridge top)
+      const W = 30 + H * 0.2;
+      y = SEA + (H - 0.3) * Math.exp(-(out / W) * (out / W)) - out * 0.05;
+      y += (nz - 0.5) * Math.min(1, out / 20) * 12 + wob * Math.min(1, out / 60) * 18;
+      if (y < SEA + 1) y = Math.max(SEA - 14, SEA + 1 - (SEA + 1 - y) * 0.5);   // the shallows past the rocks
+    } else {
+      // the town side: down the slope to a wide plain just over the sea, rolling a little, reaching the sea far out
+      const W = 40 + H * 0.25;
+      const fall = SEA + (H - 0.3) * Math.exp(-(out / W) * (out / W)) - out * 0.01 + (nz - 0.5) * Math.min(1, out / 20) * 10;
+      const plain = SEA + 3 + Math.min(out, 600) * 0.012 + (nz - 0.5) * 3 + wob * 5;
+      y = Math.max(fall, plain);
+      if (out > 650) y -= (out - 650) * 0.1;
+    }
+    if (out <= 0) y = ry - 0.3;
+    return { y: y, dist: dist, ry: ry, n: nz, side: side };
   };
 }
 
@@ -502,9 +591,9 @@ function follow(dt, snap) {
   // close behind at head height, looking down the hill: the road drops away ahead, the sea below
   // (it looks above the road ahead, so the road is seen falling away under the horizon, not tilted flat)
   // low and close, the rider big in the bottom half, the sea's horizon high in the frame
-  const back = at(T, p.s - 3.1 - p.v * 0.03, p.d * 0.92), look = at(T, p.s + 20, p.d * 0.6);
+  const back = at(T, p.s - 3.6 - p.v * 0.03, p.d * 0.9), look = at(T, p.s + 20, p.d * 0.6);
   const tall = innerHeight > innerWidth;   // a phone held upright looks further down, the horizon in the top third
-  const want = new THREE.Vector3(back.x, back.y + (tall ? 2.0 : 1.8) + (p.crash ? 1.5 : 0), back.z), wantLook = new THREE.Vector3(look.x, want.y - 23 * (tall ? 0.3 : 0.17), look.z);
+  const want = new THREE.Vector3(back.x, back.y + (tall ? 3.4 : 3.0) + (p.crash ? 1.5 : 0), back.z), wantLook = new THREE.Vector3(look.x, want.y - 24 * (tall ? 0.52 : 0.46), look.z);
   if (snap) { camPos.copy(want); camLook.copy(wantLook); }
   camPos.lerp(want, Math.min(1, dt * 5)); camLook.lerp(wantLook, Math.min(1, dt * 7));
   camera.position.copy(camPos);
@@ -673,7 +762,7 @@ function frame(now) {
 }
 
 window.ffDebug = function () { const h = riders[0].hair; if (!h) return 'no hair'; const v = new THREE.Vector3(); h.head.getWorldPosition(v); return { v: R.racers[0].v, head: v.toArray().map(function (n) { return +n.toFixed(2); }), strand: h.strands[0].pts.map(function (p) { return p.clone().sub(v).toArray().map(function (n) { return +n.toFixed(2); }); }), visible: h.group.visible, inScene: !!h.group.parent }; };
-window.ff = { R: null, keys: keys, gear: gear, go: go, get mode() { return mode; } };
+window.ff = { R: null, keys: keys, gear: gear, go: go, get mode() { return mode; }, get ground() { return world && world.userData.ground; }, camera: camera };
 loadPeople().then(function () {
   menu(); newRace();
   $('loading').classList.add('hide');

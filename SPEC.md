@@ -7,9 +7,11 @@ This file is the plan: what is decided, what is built, what comes next. Built pa
 
 ## The play (built)
 
-The camera rides just behind and above the player's skater, looking down the hill. The road is a steep coast road
-(14 to 26 %) dropping from the top of a green hill to a beach town by the sea: sweepers, a few tight bends,
-straights diving at the water, power lines down the sea side. Gravity pulls, the air holds back. The controls are
+The camera rides behind and above the player's skater, looking steeply down the hill, the sea's horizon high in the
+frame. The road is a steep ridge road (24 to 36 %, about 750 m down in 2.6 km) on a green ridge that falls away on
+both sides: to rocks, turquoise shallows, surf and a red and white lighthouse on the left, and to a plain of small
+red- and blue-roofed houses on the right, round leafy trees everywhere, ending at the beach: sweepers, a few tight
+bends, straights diving at the water, power lines down the town side. Gravity pulls, the air holds back. The controls are
 only the two halves of the screen (or ← →):
 
 - **hold left or right** to carve that way,
@@ -34,7 +36,8 @@ Every day there is a new hill, the same for everyone (the date is the seed). Rid
 - **Wind**: a rushing-air sound rising with speed, anime speed lines from the edges of the screen, the edges
   darkening, streaks flying past, the camera buzzing over the asphalt.
 - **Slides** leave marks in the vibe's colour and smoke; a fall throws up road dust.
-- A low sun over the sea with a glow, the sky mirrored in the water.
+- A high summer sun behind the riders, big cumulus, the sky mirrored in the water, colours pushed bright like an
+  anime summer.
 
 ## The skater (built)
 

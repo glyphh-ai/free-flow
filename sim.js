@@ -24,24 +24,31 @@ export function makeTrack(seed, length) {
   let s = 0, side = r() < 0.5 ? 1 : -1;
   want.fill(0, 0, 140);                                      // a straight start to push off on
   s = 140;
+  // a ridge road: long straights plunging at the coast, sweepers, now and then a bend to slide; it never turns
+  // far from the way down (its heading stays within about 25 degrees of the start's), so the view stays ahead
+  let hd = 0;
   while (s < N) {
-    const len = 60 + r() * 140, roll = r();
+    const len = 60 + r() * 130, roll = r();
     let c = 0;
-    if (roll < 0.3) c = 0;                                   // a straight, diving at the sea
-    else if (roll < 0.88) c = (1 / (70 + r() * 140));        // a sweeper
-    else c = 1 / (30 + r() * 16);                            // a tight one
-    side = r() < 0.7 ? -side : side;                         // mostly they swing back and forth, like a real pass
-    const end = Math.min(N, Math.floor(s + len));
+    if (roll < 0.35) c = 0;                                  // a straight
+    else if (roll < 0.85) c = 1 / (110 + r() * 220);         // a sweeper
+    else c = 1 / (45 + r() * 20);                            // a bend to slide
+    side = r() < 0.7 ? -side : side;
+    if (Math.abs(hd + c * side * len) > 0.42) side = -Math.sign(hd) || 1;
+    const turn = Math.min(len, c > 0 ? 0.5 / c : len);       // a sharp bend is short
+    const end = Math.min(N, Math.floor(s + turn));
     for (let i = Math.floor(s); i < end; i++) want[i] = c * side;
+    hd += c * side * (end - Math.floor(s));
     s = end;
   }
   for (let i = N - 160; i < N; i++) want[i] = 0;             // a straight finish
   // ease: average over 40 m so no bend starts all at once
   const W = 20;
   for (let i = 0; i < N; i++) { let a = 0, n = 0; for (let j = i - W; j <= i + W; j++) if (j >= 0 && j < N) { a += want[j]; n++; } k[i] = a / n; }
-  // steepness: 14 to 26 %, a steep coastal road dropping from the top of the hill to the sea
-  let gr = 0.18;
-  for (let i = 0; i < N; i++) { if (i % 180 === 0) gr = 0.14 + r() * 0.12; steep[i] = gr; }
+  // steepness: 24 to 36 %, a ridge road diving from high above the sea to the beach (it pulls like a gentler hill:
+  // see G_PULL, so the speeds stay rideable while it looks as steep as it should)
+  let gr = 0.3;
+  for (let i = 0; i < N; i++) { if (i % 180 === 0) gr = 0.24 + r() * 0.12; steep[i] = gr; }
   for (let i = 0; i < N; i++) { let a = 0, n = 0; for (let j = i - 60; j <= i + 60; j += 4) if (j >= 0 && j < N) { a += steep[j]; n++; } g[i] = a / n; }
   for (let i = 0; i < 40; i++) g[i] = 0.05 + (g[40] - 0.05) * i / 40;
   for (let i = N - 70; i < N; i++) g[i] = Math.max(0.02, g[i] * (N - i) / 70);   // flattening out at the beach
@@ -97,10 +104,10 @@ export const WHEELS = {
   // roll: how freely they roll (more is faster on the straights)
   grip:  { name: 'Grip 78a', grip: 8.0, slide: 8.0, roll: 0.85 },
   free:  { name: 'Freeride 83a', grip: 7.2, slide: 6.6, roll: 1.0 },
-  fast:  { name: 'Speed 86a', grip: 6.5, slide: 5.4, roll: 1.2 },
+  fast:  { name: 'Speed 86a', grip: 6.2, slide: 5.4, roll: 1.1 },
 };
 
-const G_PULL = 9.81;
+const G_PULL = 9.81 * 0.6;
 const AIR = 0.0031, TUCK_AIR = 0.0021, ROLL = 0.55;
 
 export function makeRacer(id, opts) {
