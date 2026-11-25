@@ -7,6 +7,8 @@ import * as THREE from 'three';
 import { makeRace, step, think, at, STEP, DECKS, WHEELS, rng } from './sim.js';
 import { loadPeople, makeSkater, pose, PEOPLE } from './skater.js';
 import { makeBoard, GRAPHICS } from './board.js';
+import { makeHair, stepHair, makeSmoke, makeSun } from './effects.js';
+import { makeMusic } from './music.js';
 
 const Q = new URLSearchParams(location.search);
 const BOT = Q.has('bot'), FAST = Math.max(1, +Q.get('fast') || 1), MUTE = Q.has('mute');
@@ -42,7 +44,8 @@ const scene = new THREE.Scene();
 const SKY = new THREE.Color(0xe4f1fa), FOG = new THREE.Color(0xc4dcef), FAR_SEA = new THREE.Color(0x3d8cc0);
 scene.fog = new THREE.Fog(FOG, 150, 2200);
 const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 3200);
-addEventListener('resize', function () { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
+addEventListener('resize', function () { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); smoke.resize(innerHeight); });
+const smoke = makeSmoke(); scene.add(smoke.points); smoke.resize(innerHeight);
 
 // a clear coast sky: a big sphere coloured from the horizon up, and clouds
 (function () {
@@ -90,6 +93,7 @@ Object.assign(sun.shadow.camera, { left: -30, right: 30, top: 30, bottom: -30, n
 sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
 scene.add(sun, sun.target);
 const SUN_DIR = new THREE.Vector3(-0.45, 0.8, 0.4).normalize();
+const sunDisc = makeSun(); scene.getObjectByName('sky').add(sunDisc);
 
 // ---------- textures, drawn ----------
 function canvasTex(w, h, draw, repeat) {
@@ -128,7 +132,8 @@ function buildWorld(T) {
   const half = T.width / 2, STEPM = 2, SEA = T.y[T.L] - 5;   // the road ends at the beach, the sea just below
   // the sun stands out over the sea, ahead of the riders, and glitters on the water
   const way = new THREE.Vector3(T.x[T.L] - T.x[0], 0, T.z[T.L] - T.z[0]).normalize();
-  SUN_DIR.set(way.x * 0.75, 0.6, way.z * 0.75).normalize();
+  SUN_DIR.set(way.x * 0.95, 0.33, way.z * 0.95).normalize();   // low, so it sits in the view and glitters on the sea
+  sunDisc.position.copy(SUN_DIR).multiplyScalar(1000);
   // the road
   {
     const pos = [], uv = [], idx = [];
@@ -346,9 +351,12 @@ function makeRider(o) {
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthWrite: false, transparent: true })); sp.scale.set(1.6, 0.4, 1); sp.position.y = 2.35; g.add(sp);
   }
   scene.add(g);
-  return { g: g, turn: turn, board: board, S: S, o: o, vibe: VIBES[o.vibe] || VIBES.chill, roll: 0, yaw: 0, spin: 0 };
+  // long hair streams back in the wind
+  const P = PEOPLE[o.who], hair = P.hair ? makeHair(S, P.hair, P.hairLength) : null;
+  if (hair) scene.add(hair.group);
+  return { g: g, turn: turn, board: board, S: S, o: o, vibe: VIBES[o.vibe] || VIBES.chill, roll: 0, yaw: 0, spin: 0, hair: hair };
 }
-function dropRider(r) { scene.remove(r.g); r.g.traverse(function (o) { if (o.geometry && !o.isSkinnedMesh) o.geometry.dispose(); }); }
+function dropRider(r) { scene.remove(r.g); if (r.hair) scene.remove(r.hair.group); r.g.traverse(function (o) { if (o.geometry && !o.isSkinnedMesh) o.geometry.dispose(); }); }
 
 // urethane on the road: the marks a slide leaves, in the rider's vibe colour
 const MARKS = 600;
@@ -363,20 +371,29 @@ function mark(x, y, z, yaw, color) {
 }
 
 // ---------- the sound: the wheels on the road, a slide, the countdown ----------
-let ac = null, roar = null, screech = null;
+// everything goes through one master (the ♪ button turns it all down), the music beside the ride's own sounds
+let ac = null, master = null, roar = null, screech = null, gust = null, music = null, muted = localStorage.getItem('ff-mute') === '1';
 function startSound() {
   if (ac || MUTE) return;
   try {
     ac = new (window.AudioContext || window.webkitAudioContext)();
-    const len = ac.sampleRate * 2, buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
-    let last = 0; for (let i = 0; i < len; i++) { last = last * 0.97 + (Math.random() * 2 - 1) * 0.03; d[i] = last * 6; }
-    const mk = function (type, f, q) { const src = ac.createBufferSource(); src.buffer = buf; src.loop = true; const fl = ac.createBiquadFilter(); fl.type = type; fl.frequency.value = f; fl.Q.value = q; const g = ac.createGain(); g.gain.value = 0; src.connect(fl); fl.connect(g); g.connect(ac.destination); src.start(); return { f: fl, g: g }; };
-    roar = mk('lowpass', 300, 0.7);
-    screech = mk('bandpass', 2400, 8);
+    master = ac.createGain(); master.gain.value = muted ? 0 : 1;
+    const comp = ac.createDynamicsCompressor(); master.connect(comp); comp.connect(ac.destination);
+    const len = ac.sampleRate * 2, buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0), white = ac.createBuffer(1, len, ac.sampleRate), w = white.getChannelData(0);
+    let last = 0; for (let i = 0; i < len; i++) { last = last * 0.97 + (Math.random() * 2 - 1) * 0.03; d[i] = last * 6; w[i] = Math.random() * 2 - 1; }
+    const mk = function (b, type, f, q) { const src = ac.createBufferSource(); src.buffer = b; src.loop = true; const fl = ac.createBiquadFilter(); fl.type = type; fl.frequency.value = f; fl.Q.value = q; const g = ac.createGain(); g.gain.value = 0; src.connect(fl); fl.connect(g); g.connect(master); src.start(); return { f: fl, g: g }; };
+    roar = mk(buf, 'lowpass', 300, 0.7);          // the wheels on the road
+    screech = mk(buf, 'bandpass', 2400, 8);       // a slide
+    gust = mk(white, 'bandpass', 700, 0.6);       // the wind past the ears
+    music = makeMusic(ac, master);
   } catch (e) { ac = null; }
 }
-function beep(f, len) { if (!ac) return; const o = ac.createOscillator(), g = ac.createGain(); o.type = 'square'; o.frequency.value = f; g.gain.setValueAtTime(0.12, ac.currentTime); g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + len); o.connect(g); g.connect(ac.destination); o.start(); o.stop(ac.currentTime + len); }
-function thud() { if (!ac) return; const o = ac.createOscillator(), g = ac.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(140, ac.currentTime); o.frequency.exponentialRampToValueAtTime(40, ac.currentTime + 0.3); g.gain.setValueAtTime(0.5, ac.currentTime); g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.35); o.connect(g); g.connect(ac.destination); o.start(); o.stop(ac.currentTime + 0.4); }
+function setMute(m) {
+  muted = m; localStorage.setItem('ff-mute', m ? '1' : '0'); $('snd').classList.toggle('off', m);
+  if (master) master.gain.setTargetAtTime(m ? 0 : 1, ac.currentTime, 0.05);
+}
+function beep(f, len) { if (!ac) return; const o = ac.createOscillator(), g = ac.createGain(); o.type = 'square'; o.frequency.value = f; g.gain.setValueAtTime(0.12, ac.currentTime); g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + len); o.connect(g); g.connect(master); o.start(); o.stop(ac.currentTime + len); }
+function thud() { if (!ac) return; const o = ac.createOscillator(), g = ac.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(140, ac.currentTime); o.frequency.exponentialRampToValueAtTime(40, ac.currentTime + 0.3); g.gain.setValueAtTime(0.5, ac.currentTime); g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.35); o.connect(g); g.connect(master); o.start(); o.stop(ac.currentTime + 0.4); }
 
 // ---------- the controls ----------
 // Hold the left or right half of the screen (or ← →) to carve that way; hold it past SLIDE_AFTER and the board kicks
@@ -470,7 +487,14 @@ function place(dt) {
     r.board.userData.wheels.forEach(function (w) { w.rotation.x -= p.v * dt / 0.035; });
     // a slide leaves marks
     if (p.slide > 0.5 && p.v > 4 && !fall && Math.random() < 0.9) { r.board.userData.wheels.forEach(function (w, j) { if (j % 2) return; w.getWorldPosition(tmp); mark(tmp.x, a.y, tmp.z, -a.h + r.yaw, r.vibe.trail); }); }
+    // and smoke: burnt urethane in a slide, road dust in a fall
+    const fx = Math.sin(a.h), fz = -Math.cos(a.h);   // the way down the road
+    if (dt > 0 && p.slide > 0.4 && p.v > 5 && !fall) r.board.userData.wheels.forEach(function (w, j) { if (Math.random() < 0.5) return; w.getWorldPosition(tmp); smoke.puff(tmp.x, tmp.y + 0.05, tmp.z, j % 2 ? '#e9e9e9' : r.vibe.trail, fx * p.v * 0.35 + (Math.random() - 0.5), 0.3 + Math.random() * 0.4, fz * p.v * 0.35 + (Math.random() - 0.5), 0.25); });
+    if (dt > 0 && fall && p.v > 2 && Math.random() < 0.6) smoke.puff(a.x, a.y + 0.2, a.z, '#c9b89a', fx * p.v * 0.4, 0.5, fz * p.v * 0.4, 0.5);
+    // hair, blown back by the speed
+    if (r.hair) { tmp.set(-fx, 0, -fz); stepHair(r.hair, tmp, p.v, R.t + i, dt, camera); }
   });
+  smoke.step(dt);
 }
 
 function follow(dt, snap) {
@@ -486,6 +510,8 @@ function follow(dt, snap) {
   camera.position.copy(camPos);
   const sp = riders[0] ? p.v : 0;
   if (p.bump > 0) camera.position.y += (Math.random() - 0.5) * 0.12;
+  // the board buzzing over the asphalt at speed
+  const buzz = Math.max(0, p.v - 20) * 0.0025; camera.position.x += (Math.random() - 0.5) * buzz; camera.position.y += (Math.random() - 0.5) * buzz;
   camera.lookAt(camLook);
   camera.fov += (64 + Math.min(24, sp * 0.6) - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix();
   wind(dt, sp);
@@ -511,6 +537,25 @@ function wind(dt, v) {
     streakPos[i * 6 + 2] = streakZ[i]; streakPos[i * 6 + 5] = streakZ[i] - len;
   }
   streaks.geometry.attributes.position.needsUpdate = true;
+}
+
+// anime speed lines: white streaks rushing in from the edges of the screen, and the edges darkening, the faster
+// the rider goes
+const lines = $('lines'), lx = lines.getContext('2d'), lineR = rng(77);
+let lineT = 0;
+function speedFx(v, dt) {
+  const k = Math.max(0, Math.min(1, (v - 17) / 13));
+  $('vig').style.opacity = (0.15 + k * 0.6).toFixed(2);
+  const W = lines.width = Math.round(innerWidth / 2), H = lines.height = Math.round(innerHeight / 2);
+  if (k <= 0) return;
+  lineT += dt;
+  const cx = W / 2, cy = H * 0.42, n = Math.round(10 + k * 34), R0 = Math.hypot(W, H) * 0.5;
+  lx.lineCap = 'round';
+  for (let i = 0; i < n; i++) {
+    const a = lineR() * Math.PI * 2, r1 = R0 * (0.55 + lineR() * 0.35), r2 = r1 + R0 * (0.15 + lineR() * 0.35) * k;
+    lx.strokeStyle = 'rgba(255,255,255,' + (0.18 + lineR() * 0.3) * k + ')'; lx.lineWidth = 0.6 + lineR() * 1.8;
+    lx.beginPath(); lx.moveTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1 * 0.8); lx.lineTo(cx + Math.cos(a) * r2, cy + Math.sin(a) * r2 * 0.8); lx.stroke();
+  }
 }
 
 // the menu: the player's rider turning slowly on the start line
@@ -585,6 +630,8 @@ function toMenu() {
 }
 function go() {
   startSound();
+  if (ac && ac.state === 'suspended') ac.resume();
+  if (music) music.start(gear.vibe);
   localStorage.setItem('ff-gear', JSON.stringify(gear));
   $('menu').classList.add('hide'); $('results').classList.add('hide'); $('hud').classList.remove('hide');
   if (mode !== 'menu') newRace();
@@ -595,6 +642,8 @@ function go() {
 $('ride').onclick = go;
 $('again').onclick = function () { seed = seed + 1; mode = 'again'; go(); };
 $('gear').onclick = toMenu;
+$('snd').onclick = function () { setMute(!muted); };
+$('snd').classList.toggle('off', muted);
 
 // ---------- the loop ----------
 let acc = 0, then = performance.now(), lastBeep = 4;
@@ -613,7 +662,8 @@ function frame(now) {
     if (R.t >= 0 && lastBeep > 0) { lastBeep = 0; beep(880, 0.4); }
     place(dt * FAST); follow(dt * FAST); hud();
     const me = R.racers[0];
-    if (roar) { roar.g.gain.value = Math.min(0.5, me.v / 50) * (me.crash ? 0.3 : 1); roar.f.frequency.value = 180 + me.v * 22; screech.g.gain.value = me.slide > 0.3 && me.v > 4 ? 0.12 * me.slide : 0; screech.f.frequency.value = 1800 + me.v * 40; }
+    if (roar) { roar.g.gain.value = Math.min(0.5, me.v / 50) * (me.crash ? 0.3 : 1); roar.f.frequency.value = 180 + me.v * 22; screech.g.gain.value = me.slide > 0.3 && me.v > 4 ? 0.12 * me.slide : 0; screech.f.frequency.value = 1800 + me.v * 40; gust.g.gain.value = Math.min(0.4, me.v * me.v / 2200); gust.f.frequency.value = 500 + me.v * 30 + Math.sin(R.t * 1.7) * 150; music.speed(me.v / 30); }
+    speedFx(me.v, dt);
     if (me.finished && !finishShown && R.t > me.finished + 1.2) results();
   } else {
     if (R) { place(dt); menuCamera(dt); }
@@ -622,6 +672,7 @@ function frame(now) {
   renderer.render(scene, camera);
 }
 
+window.ffDebug = function () { const h = riders[0].hair; if (!h) return 'no hair'; const v = new THREE.Vector3(); h.head.getWorldPosition(v); return { v: R.racers[0].v, head: v.toArray().map(function (n) { return +n.toFixed(2); }), strand: h.strands[0].pts.map(function (p) { return p.clone().sub(v).toArray().map(function (n) { return +n.toFixed(2); }); }), visible: h.group.visible, inScene: !!h.group.parent }; };
 window.ff = { R: null, keys: keys, gear: gear, go: go, get mode() { return mode; } };
 loadPeople().then(function () {
   menu(); newRace();

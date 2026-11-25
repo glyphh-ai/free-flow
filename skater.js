@@ -10,7 +10,7 @@ import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
 export const PEOPLE = {
   // her skin and her clothes are one picture: only the clothes' colours (this band of hues) take the fit's colour
-  maya: { name: 'Maya', file: 'models/Michelle.glb', height: 1.68, clothes: [0.1, 0.26] },
+  maya: { name: 'Maya', file: 'models/Michelle.glb', height: 1.68, clothes: [0.1, 0.26], hair: '#17110d', hairLength: 0.62 },
   dex:  { name: 'Dex', file: 'models/Soldier.glb', height: 1.8, clothes: [0, 1] },   // all of him is his gear
   unit: { name: 'Unit-7', file: 'models/Xbot.glb', height: 1.78 },
 };

@@ -24,6 +24,18 @@ their own gear; they brake for bends, take the inside and steer round what is in
 
 Every day there is a new hill, the same for everyone (the date is the seed). Ride again goes to the next hill.
 
+## The feel (built)
+
+- **Hair** streams back in the wind: strands hung from the back of the head, swung by gravity and flutter, blown
+  flat behind at speed (effects.js). Maya has a long ponytail.
+- **Music** for each vibe, played live with no files (music.js): Chill is lo-fi with keys and vinyl crackle, Hype is
+  house, Gnarly is fast punk, Smooth is jazzy chords. It opens up (its filter rises) the faster the rider goes.
+  The ♪ button turns all sound off and on, and is kept.
+- **Wind**: a rushing-air sound rising with speed, anime speed lines from the edges of the screen, the edges
+  darkening, streaks flying past, the camera buzzing over the asphalt.
+- **Slides** leave marks in the vibe's colour and smoke; a fall throws up road dust.
+- A low sun over the sea with a glow, the sky mirrored in the water.
+
 ## The skater (built)
 
 Each player picks:
