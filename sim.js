@@ -27,9 +27,9 @@ export function makeTrack(seed, length) {
   while (s < N) {
     const len = 60 + r() * 140, roll = r();
     let c = 0;
-    if (roll < 0.22) c = 0;                                  // a straight
-    else if (roll < 0.82) c = (1 / (55 + r() * 120));        // a sweeper
-    else c = 1 / (24 + r() * 14);                            // a hairpin-ish one
+    if (roll < 0.3) c = 0;                                   // a straight, diving at the sea
+    else if (roll < 0.88) c = (1 / (70 + r() * 140));        // a sweeper
+    else c = 1 / (30 + r() * 16);                            // a tight one
     side = r() < 0.7 ? -side : side;                         // mostly they swing back and forth, like a real pass
     const end = Math.min(N, Math.floor(s + len));
     for (let i = Math.floor(s); i < end; i++) want[i] = c * side;
@@ -39,11 +39,12 @@ export function makeTrack(seed, length) {
   // ease: average over 40 m so no bend starts all at once
   const W = 20;
   for (let i = 0; i < N; i++) { let a = 0, n = 0; for (let j = i - W; j <= i + W; j++) if (j >= 0 && j < N) { a += want[j]; n++; } k[i] = a / n; }
-  // steepness: 6 to 12 %, a little hump now and then
-  let gr = 0.08;
-  for (let i = 0; i < N; i++) { if (i % 200 === 0) gr = 0.06 + r() * 0.06; steep[i] = gr; }
+  // steepness: 14 to 26 %, a steep coastal road dropping from the top of the hill to the sea
+  let gr = 0.18;
+  for (let i = 0; i < N; i++) { if (i % 180 === 0) gr = 0.14 + r() * 0.12; steep[i] = gr; }
   for (let i = 0; i < N; i++) { let a = 0, n = 0; for (let j = i - 60; j <= i + 60; j += 4) if (j >= 0 && j < N) { a += steep[j]; n++; } g[i] = a / n; }
-  for (let i = 0; i < 30; i++) g[i] = 0.03;
+  for (let i = 0; i < 40; i++) g[i] = 0.05 + (g[40] - 0.05) * i / 40;
+  for (let i = N - 70; i < N; i++) g[i] = Math.max(0.02, g[i] * (N - i) / 70);   // flattening out at the beach
   // walk it
   for (let i = 1; i < N; i++) {
     h[i] = h[i - 1] + k[i - 1];
@@ -99,7 +100,7 @@ export const WHEELS = {
   fast:  { name: 'Speed 86a', grip: 6.5, slide: 5.4, roll: 1.2 },
 };
 
-const G_PULL = 9.81 * 1.9;   // the hill pulls a bit harder than real, so it is fast from the first bend
+const G_PULL = 9.81;
 const AIR = 0.0031, TUCK_AIR = 0.0021, ROLL = 0.55;
 
 export function makeRacer(id, opts) {
@@ -174,7 +175,7 @@ function move(R, p, dt) {
   const grip = W.grip * (p.onGravel > 0 ? 0.55 : 1) * (1 + 0.35 * p.slide) * (1 - 0.12 * p.tuck);
   const over = Math.abs(need) > grip ? (Math.abs(need) - grip) * Math.sign(need) : 0;
   // steering across
-  const turn = 7.5 * D.turn * (1 - 0.45 * p.tuck) * (1 + 0.4 * p.slide);
+  const turn = 7.5 * D.turn * (1 - 0.45 * p.tuck) * (1 + 1.0 * p.slide);   // a slide carries the board toward the side held
   p.vd += (p.steer * turn - over * 0.9) * dt;
   p.vd *= Math.pow(0.12 / D.steady, dt);               // the board straightens itself out
   const maxVd = 3.2 + p.v * 0.12;

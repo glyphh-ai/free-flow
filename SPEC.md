@@ -7,12 +7,15 @@ This file is the plan: what is decided, what is built, what comes next. Built pa
 
 ## The play (built)
 
-The camera rides just behind the player's skater. The road winds down a mountain: sweepers, tight bends, straights.
-Gravity pulls, the air holds back. The player:
+The camera rides just behind and above the player's skater, looking down the hill. The road is a steep coast road
+(14 to 26 %) dropping from the top of a green hill to a beach town by the sea: sweepers, a few tight bends,
+straights diving at the water, power lines down the sea side. Gravity pulls, the air holds back. The controls are
+only the two halves of the screen (or ← →):
 
-- **carves** left and right (← →, A D, or the ◀ ▶ buttons),
-- **tucks** for speed (↑, W, TUCK): less air, but slower to turn,
-- **slides** to scrub speed before a bend (↓, S, space, SLIDE): the board kicks sideways and leaves urethane marks.
+- **hold left or right** to carve that way,
+- **keep holding** (past 0.8 s) and the board kicks out into a **slide** toward that side, scrubbing speed and
+  leaving urethane marks,
+- **hold nothing** and the rider **tucks** for speed.
 
 A bend taken faster than the wheels can grip throws the rider to the outside, into the guard rail. Cones, hay bales,
 stopped cars, gravel and potholes are on the road: hit a bale or a car and the rider is thrown, tumbles, and gets

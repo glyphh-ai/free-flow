@@ -40,14 +40,18 @@
   #bar i.me { width: 18px; height: 18px; top: -5px; margin-left: -9px; border-color: #fff; z-index: 2; }
   #flag { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); font: 900 italic 130px/1 "Futura", system-ui, sans-serif; color: var(--sun); text-shadow: 0 6px 0 rgba(0,0,0,0.45); }
   #msg { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); font: 900 italic 30px/1 "Futura", system-ui, sans-serif; color: var(--sun); text-shadow: 0 3px 0 rgba(0,0,0,0.4); white-space: nowrap; }
-  #touch { position: fixed; inset: auto 0 0 0; height: 46%; display: none; pointer-events: none; }
-  body.touch #touch { display: block; }
-  .tb { position: absolute; bottom: 22px; width: 92px; height: 92px; border-radius: 50%; background: rgba(255,255,255,0.14); border: 2px solid rgba(255,255,255,0.3); display: grid; place-items: center; font: 900 italic 15px/1 "Futura", system-ui, sans-serif; pointer-events: auto; }
-  .tb.on { background: rgba(255,93,58,0.45); }
+  /* the two halves of the screen: a glow on the side held, hotter once it is a slide */
+  #touch { position: fixed; inset: 0; pointer-events: none; }
+  #touch i { position: absolute; top: 0; bottom: 0; width: 22%; opacity: 0; transition: opacity 0.12s; }
+  #touch i:first-child { left: 0; background: linear-gradient(90deg, rgba(255,255,255,0.22), rgba(255,255,255,0)); }
+  #touch i:last-child { right: 0; background: linear-gradient(270deg, rgba(255,255,255,0.22), rgba(255,255,255,0)); }
+  #touch.left i:first-child, #touch.right i:last-child { opacity: 1; }
+  #touch.slide i:first-child { background: linear-gradient(90deg, rgba(255,93,58,0.5), rgba(255,93,58,0)); }
+  #touch.slide i:last-child { background: linear-gradient(270deg, rgba(255,93,58,0.5), rgba(255,93,58,0)); }
+  #hint { position: absolute; left: 50%; bottom: 13%; transform: translateX(-50%); width: 92%; max-width: 560px; text-align: center; font: 800 16px/1.35 "Avenir Next", system-ui, sans-serif; text-shadow: 0 2px 4px rgba(0,0,0,0.6); transition: opacity 0.6s; }
+  #hint b { color: var(--sun); }
   #tl { left: 18px; } #tr { left: 124px; } #ts { right: 18px; bottom: 120px; } #tt { right: 124px; }
-  body.touch #speed { right: auto; left: 18px; bottom: 128px; text-align: left; font-size: 40px; }
-  body.touch #tl { left: 14px; } body.touch #tr { left: 114px; }
-  body.touch #ts { right: 14px; bottom: 22px; } body.touch #tt { right: 14px; bottom: 124px; }
+  body.touch #speed { font-size: 44px; }
   #results { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(420px, 92vw); padding: 24px; background: var(--bg); border-radius: 18px; backdrop-filter: blur(8px); }
   #results h2 { margin: 0 0 12px; font: 900 italic 40px/1 "Futura", system-ui, sans-serif; text-transform: uppercase; }
   #results table { width: 100%; border-collapse: collapse; }
@@ -80,17 +84,15 @@
   <div class="opts" id="o-wheelc" style="margin-top:8px"></div>
   <div class="row">Vibe</div><div class="opts" id="o-vibe"></div>
   <button id="ride">Drop in</button>
-  <div class="keys">← → carve · ↑ tuck for speed · ↓ or space to slide and slow down</div>
+  <div class="keys">Hold left or right (screen or ← →) to carve · keep holding to slide · let go to tuck</div>
 </div>
 
 <div id="hud" class="hide">
   <div id="place"></div><div id="time"></div><div id="bar"></div>
   <div id="speed"></div><div id="flag"></div><div id="msg"></div>
+  <div id="hint">Hold <b>left</b> or <b>right</b> to carve · keep holding to <b>slide</b> · let go to tuck</div>
 </div>
-<div id="touch">
-  <div class="tb" id="tl">◀</div><div class="tb" id="tr">▶</div>
-  <div class="tb" id="tt">TUCK</div><div class="tb" id="ts">SLIDE</div>
-</div>
+<div id="touch"><i></i><i></i></div>
 
 <div id="results" class="hide">
   <h2 id="rtitle"></h2>

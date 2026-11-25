@@ -55,10 +55,16 @@ const ready = function (page) { return page.waitForFunction(function () { return
 {
   const { browser, page, errors } = await open('/?seed=13&mute&go', { phone: true });
   await ready(page);
-  assert(await page.isVisible('#ts'), 'the touch buttons');
   await page.waitForFunction(function () { return window.ff.R.t > 1; }, null, { timeout: 60000 });
+  // holding the right half carves right, and held on, slides
+  const d0 = await page.evaluate(function () { return window.ff.R.racers[0].d; });
+  await page.mouse.move(330, 600); await page.mouse.down();
+  await page.waitForFunction(function (d) { return window.ff.R.racers[0].d > d + 0.5; }, d0, { timeout: 60000 });
+  await page.waitForFunction(function () { return window.ff.R.racers[0].input.slide === 1; }, null, { timeout: 60000 });
+  await page.mouse.up();
+  await page.waitForFunction(function () { return window.ff.R.racers[0].input.tuck === 1; }, null, { timeout: 60000 });
   await page.screenshot({ path: path.join(SHOTS, 'phone.png') });
   assert.deepStrictEqual(errors, []);
   await browser.close();
 }
-console.log('OK browser: menu, gear kept, countdown, steering, a whole hill to the results, a phone');
+console.log('OK browser: menu, gear kept, countdown, steering, a whole hill to the results, a phone held left/right to carve and slide');
