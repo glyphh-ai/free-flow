@@ -552,11 +552,12 @@ function place(dt) {
     const r = riders[i], a = at(T, p.s, p.d), ahead = at(T, p.s + 1.5, p.d), behind = at(T, p.s - 1.5, p.d);
     const pitch = Math.atan2(ahead.y - behind.y, 3);
     // leaning into a bend: as much as the turn asks, and the steering
-    const wantRoll = -Math.atan(p.v * p.v * T.k[Math.min(T.L, Math.floor(p.s))] / 9.81) * 0.9 - p.steer * 0.22 * r.vibe.lean;
+    // (only when a side is held: with nothing held the rider stays square on the board, tucked)
+    const wantRoll = -p.steer * 0.3 * r.vibe.lean;
     r.roll += (wantRoll - r.roll) * Math.min(1, dt * 8);
     // the nose points the way the board is going (a positive yaw turns it left), and in a slide it swings round
     // toward the side held
-    const wantYaw = -(p.slide * 1.25 * (p.steer < -0.1 ? -1 : 1) + p.vd * 0.04);
+    const wantYaw = -(p.slide * 1.25 * (p.steer < -0.1 ? -1 : 1) + p.steer * 0.12);
     r.yaw += (wantYaw - r.yaw) * Math.min(1, dt * 9);
     r.g.position.set(a.x, a.y + 0.02, a.z);
     r.g.rotation.set(pitch, -a.h, 0, 'YXZ');
@@ -594,8 +595,8 @@ function follow(dt, snap) {
   // the board near the bottom, the road dropping away and the sea's horizon in the top quarter
   // (heights from where she is, not from the road behind, which is higher on a hill this steep)
   const tall = innerHeight > innerWidth;
-  const back = at(T, p.s - (tall ? 2.2 : 2.8), p.d), look = at(T, p.s + 20, p.d * 0.8), here = at(T, p.s, p.d);
-  const want = new THREE.Vector3(back.x, here.y + (tall ? 2.6 : 2.4) + (p.crash ? 1.5 : 0), back.z), wantLook = new THREE.Vector3(look.x, want.y - 20 * (tall ? 0.4 : 0.29), look.z);
+  const back = at(T, p.s - (tall ? 1.6 : 2.0), p.d), look = at(T, p.s + 20, p.d * 0.8), here = at(T, p.s, p.d);
+  const want = new THREE.Vector3(back.x, here.y + (tall ? 2.2 : 2.0) + (p.crash ? 1.5 : 0), back.z), wantLook = new THREE.Vector3(look.x, want.y - 20 * (tall ? 0.4 : 0.36), look.z);
   if (snap) { camPos.copy(want); camLook.copy(wantLook); }
   camPos.lerp(want, Math.min(1, dt * 9)); camLook.lerp(wantLook, Math.min(1, dt * 9));
   camera.position.copy(camPos);
